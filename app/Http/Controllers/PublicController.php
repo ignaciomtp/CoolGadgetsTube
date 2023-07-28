@@ -15,209 +15,6 @@ use App\Mail\ContactEmail;
 
 class PublicController extends Controller
 {
-    
-    public function processedProducts($allProducts) {
-        $asins = [];
-        $ids = [];
-        $images = [];
-        $videos = [];
-        $likes = [];
-        $descs = [];
-        $names = [];
-
-        $products = [];
-        $productsA = [];
-        $productsNA = [];
-
-        $errors = [];
-
-        // Separar los artículos de Amazon de los demás
-        foreach($allProducts as $prod){
-            if($prod->affiliate == 'Amazon') {
-                array_push($asins, $prod->affiliate_code);
-                $ids[$prod->affiliate_code] = $prod->id;
-                $images[$prod->affiliate_code] = $prod->image;
-            //    $images[$prod->affiliate_code] = null;
-                $images2[$prod->affiliate_code] = $prod->image2;
-                $videos[$prod->affiliate_code] = $prod->video;
-                $likes[$prod->affiliate_code] = $prod->likes;
-                $descs[$prod->affiliate_code] = $prod->description_long;
-                $names[$prod->affiliate_code] = $prod->name;
-                $slugs[$prod->affiliate_code] = $prod->slug;
-                $links[$prod->affiliate_code] = $prod->link;
-            } else {
-                $nwItem = (object)[
-                    'price' => '',
-                    'name' => $prod->name,
-                    'nameShow' => substr($prod->name, 0, 80),
-                    'slug' => $prod->slug,
-                    'image' => $prod->image,
-                    'image2' => $prod->image2,
-                    'link' => $prod->link,
-                    'description' => $prod->description_long,
-                    'id' => $prod->id,
-                    'video' => $prod->video,
-                    'affiliate' => $prod->affiliate,
-                    'affiliate_code' => $prod->affiliate_code,
-                    'likes' => $prod->likes,
-                    'created' => $prod->created_at
-                ];
-                array_push($productsNA, $nwItem);
-            }
-            
-        }
-    
-
-        if(count($asins) > 0) {
-            // Coger los artículos de Amazon de la API
-/*
-            $results = json_decode(getItemsByAsinFromApi($asins), true);
-            
-
-            if(isset($results['Errors'])) {
-                $errors = $results['Errors'];
-            }
-
-            $items = $results['ItemsResult']['Items'];
-
-            foreach($items as $res){
-                $newItem = (object)[
-                    'price' => isset($res['Offers']['Listings'][0]['Price']['DisplayAmount']) ? $res['Offers']['Listings'][0]['Price']['DisplayAmount'] : 'N/A', 
-                    'name' => $res['ItemInfo']['Title']['DisplayValue'],
-                    'nameShow' => $names[$res['ASIN']],
-                    //'nameShow' => substr($res['ItemInfo']['Title']['DisplayValue'], 0, 80) . '...',
-                    'image' => $images[$res['ASIN']] ? request()->getSchemeAndHttpHost()."/img/products/".$images[$res['ASIN']] : $res['Images']['Primary']['Large']['URL'],
-                    'link' => $res['DetailPageURL'],
-                    'slug' => $slugs[$res['ASIN']],
-                    'description' => $descs[$res['ASIN']],
-                    'id' => $ids[$res['ASIN']],
-                    'video' => $videos[$res['ASIN']],
-                    'affiliate' => 'Amazon',
-                    'affiliate_code' => $res['ASIN'],
-                    'likes' => $likes[$res['ASIN']],
-                    'created' => $prod->created_at,
-                    'features' => isset($res['ItemInfo']['Features']) ? $res['ItemInfo']['Features']['DisplayValues'] : '',
-                ];
-
-                array_push($productsA, $newItem);
-            }
-*/
-
-            foreach($asins as $asin) {
-                $newItem = (object)[
-                    'price' => null, 
-                    'name' => $names[$asin],
-                    'nameShow' => $names[$asin],
-                    'image' =>  request()->getSchemeAndHttpHost()."/img/products/".$images[$asin],
-                    'image2' =>  $images2[$asin] ? request()->getSchemeAndHttpHost()."/img/products/".$images2[$asin] : null,
-                    'link' => $links[$asin],
-                    'slug' => $slugs[$asin],
-                    'description' => $descs[$asin],
-                    'id' => $ids[$asin],
-                    'video' => $videos[$asin],
-                    'affiliate' => 'Amazon',
-                    'affiliate_code' => $asin,
-                    'likes' => $likes[$asin],                    
-                    'features' => '',
-                ];
-
-                array_push($productsA, $newItem);               
-            }
-
-        }    
-
-
-        foreach($allProducts as $product) {
-            $p = $product->affiliate == 'Amazon' ? $this->findInArray($productsA, $product->affiliate_code) : $this->findInArray($productsNA, $product->affiliate_code);
-
-            if($p) array_push($products, $p);
-        }
-
-
-        if(count($errors) > 0) $this->processErrors($errors);
-
-        return $products;
-    }
-
-    public function processErrors($errors) {
-
-        foreach($errors as $error) {
-
-            $oldError = DB::table('errors')->where('message',$error['Message'])->first();
-
-            if ($oldError == null) {
-                $newError = new Error();
-                $newError->message = $error['Message'];
-                $newError->save();
-
-                $this->alertError($error);
-            }
-
-        }
-
-    }
-
-    public function alertError($error) {
-        $text = "Error API Amazon: ".$error['Code'].', '.$error['Message'];
-
-        $headers = 'From: info@nowineedthat.store'. "\r\n" .
-            'Reply-To: info@nowineedthat.store'. "\r\n" .
-            'X-Mailer: PHP/' . phpversion();
-
-        mail('ignaciomtp@gmail.com', 'Error CGT Amazon' , $text , $headers);        
-    }
-
-    public function findInArray($array, $needle) {
-        $result = null;
-        for($i = 0; $i < count($array); $i++) {
-            if($array[$i]->affiliate_code == $needle) {
-                $result = $array[$i];
-                break;
-            }
-        }
-
-        return $result;
-    }
-
-    public function indexOld() {
-        $allProducts = Product::orderBy('created_at', 'desc')->take(6)->get();
-
-        $products = $this->processedProducts($allProducts);
-
-        $categories = Category::all();
-
-        $allTags = Tag::all()->sortBy('name');
-        $tags = [];
-
-        foreach($allTags as $tag) {
-            if($tag->products->count() > 0) array_push($tags, $tag);
-        }
-
-        $menuItems = Menu::all();
-        
-
-        $tProducts = [];
-
-        $canon = '';
-
-        $posts = Post::orderBy('created_at', 'desc')->take(5)->get();
-/*
-        $topProducts = Product::orderBy('likes', 'desc')->orderBy('id', 'ASC')->take(6)->get();
-
-        $tProducts = $this->processedProducts($topProducts);
-
-
-
-        if (isset($_SERVER['HTTPS']) &&
-            ($_SERVER['HTTPS'] == 'on' || $_SERVER['HTTPS'] == 1) ||
-            isset($_SERVER['HTTP_X_FORWARDED_PROTO']) &&
-            $_SERVER['HTTP_X_FORWARDED_PROTO'] == 'https') {
-          $canon = '<link rel="canonical" href="https://coolgadgetstube.com/" />';
-        }
-*/
-        return view('index', compact('tags', 'canon', 'categories', 'menuItems', 'products', 'posts'));
-    }
-
 
     public function index() {
         $categories = Category::all();
@@ -233,7 +30,7 @@ class PublicController extends Controller
 
         $allProducts = Product::orderBy('created_at', 'desc')->take(9)->get();
 
-        $products = $this->processedProducts($allProducts);
+        $products = processedProducts($allProducts);
 
         $canon = '';
 
@@ -264,7 +61,7 @@ class PublicController extends Controller
 
         $allProducts = Product::orderBy('created_at', 'desc')->take(9)->get();
 
-        $products = $this->processedProducts($allProducts);
+        $products = processedProducts($allProducts);
 
         $canon = '';
 
@@ -295,7 +92,7 @@ class PublicController extends Controller
 
         $allProducts = Product::orderBy('created_at', 'desc')->take(9)->get();
 
-        $products = $this->processedProducts($allProducts);
+        $products = processedProducts($allProducts);
 
         $canon = '';
 
@@ -324,7 +121,7 @@ class PublicController extends Controller
 
         $allProducts = Product::inRandomOrder()->limit(9)->get();
 
-        $products = $this->processedProducts($allProducts);
+        $products = processedProducts($allProducts);
 
         $title = 'Random cool things we have';
 
@@ -367,7 +164,7 @@ class PublicController extends Controller
         $newArray = array_slice($nProds, $batch, 9);
 
         if(count($newArray) > 0) {
-            $products = $this->processedProducts($newArray);
+            $products = processedProducts($newArray);
             $html = $this->parseResults($products);
         }
 
@@ -389,7 +186,7 @@ class PublicController extends Controller
 
         $nProds = $allProducts->slice(($pag - 1) * 9);
 
-        if($nProds->count() > 0) $products = $this->processedProducts($nProds->all());
+        if($nProds->count() > 0) $products = processedProducts($nProds->all());
 
         return $this->parseResults($products);
 
@@ -515,7 +312,7 @@ class PublicController extends Controller
                 if($counter == 10) break;
             }
 
-            $products = $this->processedProducts($firstTen);            
+            $products = processedProducts($firstTen);            
         }
 
 
@@ -563,7 +360,7 @@ class PublicController extends Controller
             array_push($allProducts, $prod);
         }
 
-        $res = $this->processedProducts($allProducts);
+        $res = processedProducts($allProducts);
 
         if(!$res) return view('error', compact('menuItems'));
 
@@ -605,7 +402,7 @@ class PublicController extends Controller
                 if($counter == 10) break;
             }
 
-            $products = $this->processedProducts($firstTen);            */
+            $products = processedProducts($firstTen);            */
 
             if(count($items) > 10) {
                 $firstLoad = array_slice($items, 0, 10);
@@ -615,7 +412,7 @@ class PublicController extends Controller
 
 
 
-            $products = $this->processedProducts($firstLoad); 
+            $products = processedProducts($firstLoad); 
         }
 
         $interlinks = [];
@@ -677,7 +474,7 @@ class PublicController extends Controller
 
         $allProducts = Product::orderBy('likes', 'desc')->orderBy('id', 'ASC')->take(9)->get();
 
-        $products = $this->processedProducts($allProducts);
+        $products = processedProducts($allProducts);
 
         $title = 'Most Popular Products';
 
@@ -707,7 +504,7 @@ class PublicController extends Controller
         
         if(count($items) > 0) {
             if($category == 'popular') {
-                $products = $this->processedProducts($items);
+                $products = processedProducts($items);
             } else {
                 $firstTen = [];
                 $counter = 0;
@@ -721,7 +518,7 @@ class PublicController extends Controller
                 }
 
 
-                $products = $this->processedProducts($firstTen);
+                $products = processedProducts($firstTen);
 
             }
 
@@ -731,6 +528,77 @@ class PublicController extends Controller
         
         return '';
     }
+
+
+    public function processErrors($errors) {
+
+        foreach($errors as $error) {
+
+            $oldError = DB::table('errors')->where('message',$error['Message'])->first();
+
+            if ($oldError == null) {
+                $newError = new Error();
+                $newError->message = $error['Message'];
+                $newError->save();
+
+                $this->alertError($error);
+            }
+
+        }
+
+    }
+
+    public function alertError($error) {
+        $text = "Error API Amazon: ".$error['Code'].', '.$error['Message'];
+
+        $headers = 'From: info@nowineedthat.store'. "\r\n" .
+            'Reply-To: info@nowineedthat.store'. "\r\n" .
+            'X-Mailer: PHP/' . phpversion();
+
+        mail('ignaciomtp@gmail.com', 'Error CGT Amazon' , $text , $headers);        
+    }
+
+
+
+    public function indexOld() {
+        $allProducts = Product::orderBy('created_at', 'desc')->take(6)->get();
+
+        $products = processedProducts($allProducts);
+
+        $categories = Category::all();
+
+        $allTags = Tag::all()->sortBy('name');
+        $tags = [];
+
+        foreach($allTags as $tag) {
+            if($tag->products->count() > 0) array_push($tags, $tag);
+        }
+
+        $menuItems = Menu::all();
+        
+
+        $tProducts = [];
+
+        $canon = '';
+
+        $posts = Post::orderBy('created_at', 'desc')->take(5)->get();
+/*
+        $topProducts = Product::orderBy('likes', 'desc')->orderBy('id', 'ASC')->take(6)->get();
+
+        $tProducts = processedProducts($topProducts);
+
+
+
+        if (isset($_SERVER['HTTPS']) &&
+            ($_SERVER['HTTPS'] == 'on' || $_SERVER['HTTPS'] == 1) ||
+            isset($_SERVER['HTTP_X_FORWARDED_PROTO']) &&
+            $_SERVER['HTTP_X_FORWARDED_PROTO'] == 'https') {
+          $canon = '<link rel="canonical" href="https://coolgadgetstube.com/" />';
+        }
+*/
+        return view('index', compact('tags', 'canon', 'categories', 'menuItems', 'products', 'posts'));
+    }
+
 
     public function popTest($items = 0) {
         $allProducts = Product::orderBy('likes', 'desc')->orderBy('id', 'ASC')->take($items + 9)->get();
@@ -767,7 +635,7 @@ class PublicController extends Controller
             }
 
 
-            $products = $this->processedProducts($firstTen);   
+            $products = processedProducts($firstTen);   
 
             return $this->parseResults($products);         
         }
@@ -973,7 +841,7 @@ class PublicController extends Controller
 
             $prods = $this->postMultiProducts($tagsString);
 
-            $products = $this->processedProducts($prods);
+            $products = processedProducts($prods);
 
             $finalText = $textBlocks[0];
 
@@ -991,7 +859,7 @@ class PublicController extends Controller
 
         } else {
 
-            $products = $this->processedProducts($post->products);
+            $products = processedProducts($post->products);
 
             $textBlocks = explode('[[ prod ]]', $post->text);
 
@@ -1052,7 +920,7 @@ class PublicController extends Controller
 
         if(count($pds) == 0) return $result;
 
-        $products = $this->processedProducts($pds);
+        $products = processedProducts($pds);
 
         $a = intval($prods) + 1;
         foreach($products as $key=>$value) {
@@ -1072,7 +940,7 @@ class PublicController extends Controller
 
         
 
-        $products = $this->processedProducts($post->products);
+        $products = processedProducts($post->products);
 
         $textBlocks = explode('[[ prod ]]', $post->text);
 
@@ -1428,7 +1296,7 @@ class PublicController extends Controller
 
             $prods = $this->postMultiProducts($tagsString, -1);
 
-            $products = $this->processedProducts($prods);
+            $products = processedProducts($prods);
 
             $finalText = $textBlocks[0];
 
@@ -1446,7 +1314,7 @@ class PublicController extends Controller
 
         } else {
 
-            $products = $this->processedProducts($post->products);
+            $products = processedProducts($post->products);
 
             $textBlocks = explode('[[ prod ]]', $post->text);
 

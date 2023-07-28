@@ -3,6 +3,7 @@
 use App\AwsV4;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
+use App\Http\Controllers\PublicController;
 use App\Models\Category;
 use App\Models\Product;
 
@@ -329,9 +330,6 @@ if (! function_exists('getOneItemFromApi')) {
 
 
 
-
-
-
 if (! function_exists('categoryBrand')){
     function categoryBrand($categoryName){
         $brand = '';
@@ -351,5 +349,149 @@ if (! function_exists('categoryBrand')){
         return $brand;
 
     }
+}
+
+if (! function_exists('processedProducts')) {
+    function processedProducts($allProducts) {
+        $asins = [];
+        $ids = [];
+        $images = [];
+        $videos = [];
+        $likes = [];
+        $descs = [];
+        $names = [];
+
+        $products = [];
+        $productsA = [];
+        $productsNA = [];
+
+        $errors = [];
+
+        // Separar los artículos de Amazon de los demás
+        foreach($allProducts as $prod){
+            if($prod->affiliate == 'Amazon') {
+                array_push($asins, $prod->affiliate_code);
+                $ids[$prod->affiliate_code] = $prod->id;
+                $images[$prod->affiliate_code] = $prod->image;
+            //    $images[$prod->affiliate_code] = null;
+                $images2[$prod->affiliate_code] = $prod->image2;
+                $videos[$prod->affiliate_code] = $prod->video;
+                $likes[$prod->affiliate_code] = $prod->likes;
+                $descs[$prod->affiliate_code] = $prod->description_long;
+                $names[$prod->affiliate_code] = $prod->name;
+                $slugs[$prod->affiliate_code] = $prod->slug;
+                $links[$prod->affiliate_code] = $prod->link;
+            } else {
+                $nwItem = (object)[
+                    'price' => '',
+                    'name' => $prod->name,
+                    'nameShow' => substr($prod->name, 0, 80),
+                    'slug' => $prod->slug,
+                    'image' => $prod->image,
+                    'image2' => $prod->image2,
+                    'link' => $prod->link,
+                    'description' => $prod->description_long,
+                    'id' => $prod->id,
+                    'video' => $prod->video,
+                    'affiliate' => $prod->affiliate,
+                    'affiliate_code' => $prod->affiliate_code,
+                    'likes' => $prod->likes,
+                    'created' => $prod->created_at
+                ];
+                array_push($productsNA, $nwItem);
+            }
+            
+        }
+    
+
+        if(count($asins) > 0) {
+            // Coger los artículos de Amazon de la API
+/*
+            $results = json_decode(getItemsByAsinFromApi($asins), true);
+            
+
+            if(isset($results['Errors'])) {
+                $errors = $results['Errors'];
+            }
+
+            $items = $results['ItemsResult']['Items'];
+
+            foreach($items as $res){
+                $newItem = (object)[
+                    'price' => isset($res['Offers']['Listings'][0]['Price']['DisplayAmount']) ? $res['Offers']['Listings'][0]['Price']['DisplayAmount'] : 'N/A', 
+                    'name' => $res['ItemInfo']['Title']['DisplayValue'],
+                    'nameShow' => $names[$res['ASIN']],
+                    //'nameShow' => substr($res['ItemInfo']['Title']['DisplayValue'], 0, 80) . '...',
+                    'image' => $images[$res['ASIN']] ? request()->getSchemeAndHttpHost()."/img/products/".$images[$res['ASIN']] : $res['Images']['Primary']['Large']['URL'],
+                    'link' => $res['DetailPageURL'],
+                    'slug' => $slugs[$res['ASIN']],
+                    'description' => $descs[$res['ASIN']],
+                    'id' => $ids[$res['ASIN']],
+                    'video' => $videos[$res['ASIN']],
+                    'affiliate' => 'Amazon',
+                    'affiliate_code' => $res['ASIN'],
+                    'likes' => $likes[$res['ASIN']],
+                    'created' => $prod->created_at,
+                    'features' => isset($res['ItemInfo']['Features']) ? $res['ItemInfo']['Features']['DisplayValues'] : '',
+                ];
+
+                array_push($productsA, $newItem);
+            }
+*/
+
+            foreach($asins as $asin) {
+                $newItem = (object)[
+                    'price' => null, 
+                    'name' => $names[$asin],
+                    'nameShow' => $names[$asin],
+                    'image' =>  request()->getSchemeAndHttpHost()."/img/products/".$images[$asin],
+                    'image2' =>  $images2[$asin] ? request()->getSchemeAndHttpHost()."/img/products/".$images2[$asin] : null,
+                    'link' => $links[$asin],
+                    'slug' => $slugs[$asin],
+                    'description' => $descs[$asin],
+                    'id' => $ids[$asin],
+                    'video' => $videos[$asin],
+                    'affiliate' => 'Amazon',
+                    'affiliate_code' => $asin,
+                    'likes' => $likes[$asin],                    
+                    'features' => '',
+                ];
+
+                array_push($productsA, $newItem);               
+            }
+
+        }    
+
+
+        foreach($allProducts as $product) {
+            $p = $product->affiliate == 'Amazon' ? findInArray($productsA, $product->affiliate_code) : findInArray($productsNA, $product->affiliate_code);
+
+            if($p) array_push($products, $p);
+        }
+
+
+        if(count($errors) > 0) PublicController::processErrors($errors);
+
+        return $products;
+    }
+}
+
+if (! function_exists('findInArray')) {
+    function findInArray($array, $needle) {
+        $result = null;
+        for($i = 0; $i < count($array); $i++) {
+            if($array[$i]->affiliate_code == $needle) {
+                $result = $array[$i];
+                break;
+            }
+        }
+
+        return $result;
+    }
+}
+
+
+if (! function_exists('processErrors')) {
+
 }
 
