@@ -1,0 +1,15 @@
+.cat-checks{
+	display: flex;
+	flex-direction: row;
+	flex-wrap: wrap;
+}
+
+.form-check2{
+	width: 180px;
+	height: 30px;
+	padding-left: 1.25rem;
+}
+
+.borde {
+	border: 1px solid black;
+}
